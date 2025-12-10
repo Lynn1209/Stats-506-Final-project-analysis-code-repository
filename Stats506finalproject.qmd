@@ -1,0 +1,201 @@
+---
+title: "Stats506 Final Project"
+format: html
+---
+
+## data
+
+```{r}
+data <- read.csv("YEAR-02-DATA-PUF.csv")
+View(data)
+```
+
+```{r}
+names(data)
+```
+
+```{r}
+grep("ExtAffairs", names(data), value = TRUE)
+```
+
+```{r}
+adv_vars <- grep("ExtAffairs", names(data), value = TRUE)
+
+data$advocacy_binary <- ifelse(
+  apply(data[adv_vars], 1, function(x) any(x != "Never" & !is.na(x))),
+  1, 0
+)
+```
+
+```{r}
+table(data$advocacy_binary)
+```
+
+```{r}
+grep("Gov", names(data), value = TRUE)
+grep("Rev", names(data), value = TRUE)
+grep("fund", names(data), value = TRUE)
+```
+
+```{r}
+data$gov_funding_total <- data$Finance_Rev_GovtMain + data$Finance_Rev_Govt3rdParty
+```
+
+```{r}
+grep("^Finance_Rev", names(data), value = TRUE)
+```
+
+```{r}
+rev_vars <- c(
+  "Finance_Rev_GovtMain",
+  "Finance_Rev_Prtcpnt",
+  "Finance_Rev_Govt3rdParty",
+  "Finance_Rev_IndvDon",
+  "Finance_Rev_Gift",
+  "Finance_Rev_Grnt",
+  "Finance_Rev_Spnsr",
+  "Finance_Rev_Oth"
+)
+
+data$total_rev <- rowSums(data[rev_vars], na.rm = TRUE)
+```
+
+```{r}
+summary(data$total_rev)
+```
+
+```{r}
+# government funding total
+data$gov_funding_total <- 
+  data$Finance_Rev_GovtMain + data$Finance_Rev_Govt3rdParty
+```
+
+```{r}
+# government funding share (%)
+data$gov_share <- data$gov_funding_total / data$total_rev
+summary(data$gov_share)
+```
+
+```{r}
+grep("Prg", names(data), value = TRUE)
+grep("Ppl", names(data), value = TRUE)
+grep("Srv", names(data), value = TRUE)
+```
+```{r}
+grep("Geo", names(data), value = TRUE)
+grep("State", names(data), value = TRUE)
+grep("Loc", names(data), value = TRUE)
+grep("Urban", names(data), value = TRUE)
+```
+```{r}
+grep("Staff", names(data), value = TRUE)
+grep("Fulltime", names(data), value = TRUE)
+grep("Parttime", names(data), value = TRUE)
+grep("Size", names(data), value = TRUE)
+```
+
+#model1
+
+```{r}
+data$size <- ifelse(
+  !is.na(data$Staff_Fulltime_2021),
+  data$Staff_Fulltime_2021,
+  data$Staff_Fulltime_2022
+)
+```
+
+```{r}
+model <- glm(
+  advocacy_binary ~ gov_share + size,
+  data = data,
+  family = binomial
+)
+
+summary(model)
+```
+
+```{r}
+library(ggplot2)
+
+# create dataframe for prediction
+newdata <- data.frame(
+  gov_share = seq(min(data$gov_share, na.rm=TRUE),
+                  max(data$gov_share, na.rm=TRUE),
+                  length.out = 100),
+  size = mean(data$size, na.rm = TRUE)
+)
+
+newdata$pred <- predict(model, newdata, type = "response")
+
+# plot
+ggplot(newdata, aes(x = gov_share, y = pred)) +
+  geom_line(color = "steelblue", size = 1.2) +
+  labs(
+    x = "Government Funding Share",
+    y = "Predicted Probability of Advocacy",
+    title = "Predicted Probability of Advocacy vs. Government Funding Share"
+  ) +
+  theme_minimal(base_size = 14)
+```
+
+# Model2
+
+```{r}
+# Model 2：Interaction between gov_share and size
+model2 <- glm(
+  advocacy_binary ~ gov_share * size,
+  data = data,
+  family = binomial
+)
+```
+
+```{r}
+data$size_group <- cut(data$size,
+                       breaks = quantile(data$size, probs = c(0, .33, .67, 1), na.rm=TRUE),
+                       labels = c("Small", "Medium", "Large"),
+                       include.lowest = TRUE)
+```
+
+```{r}
+# newdata with size groups
+newdata2 <- expand.grid(
+  gov_share = seq(min(data$gov_share, na.rm=TRUE),
+                  max(data$gov_share, na.rm=TRUE),
+                  length.out=100),
+  size_group = c("Small", "Medium", "Large")
+)
+
+# give numeric size representative for each group
+group_means <- tapply(data$size, data$size_group, mean, na.rm=TRUE)
+newdata2$size <- group_means[newdata2$size_group]
+
+newdata2$pred <- predict(model2, newdata2, type="response")
+
+library(ggplot2)
+ggplot(newdata2, aes(x = gov_share, y = pred, color = size_group)) +
+  geom_line(size=1.2) +
+  labs(title="Interaction Effect: Government Funding × Size",
+       y="Predicted Probability of Advocacy",
+       x="Government Funding Share",
+       color="Organization Size") +
+  theme_minimal(base_size=14)
+```
+
+# Model3
+
+```{r}
+# volunteer count (fill NA with 0)
+data$volunteer_count <- data$Staff_RegVlntr_2021
+data$volunteer_count[is.na(data$volunteer_count)] <- 0
+
+model_clean <- glm(
+    advocacy_binary ~ gov_share + size + volunteer_count,
+    data = data,
+    family = binomial
+)
+
+summary(model_clean)
+```
+
+
+
