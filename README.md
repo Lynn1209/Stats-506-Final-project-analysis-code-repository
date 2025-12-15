@@ -50,7 +50,7 @@ Open `Stats506finalproject.qmd` in RStudio and render the document to reproduce 
 
 ## Author
 **Linxuan Ma**  
-M.S. in Applied Statistics  
+M.S. student in Applied Statistics  
 University of Michigan
 
 ---
